@@ -99,6 +99,13 @@ return [
         ],
     ],
 
+    'guards' => [
+        'api' => [
+            'driver' => 'jwt',
+            'provider' => 'users',
+        ],
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Password Confirmation Timeout

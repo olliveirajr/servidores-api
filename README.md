@@ -87,3 +87,62 @@ MINIO_BUCKET=servidores
   ```bash
   docker compose exec app chmod -R 775 storage
   ```
+
+### **Passo a Passo para Criar um Usuário**
+
+#### 1. **Execute o Tinker no Container**
+```bash
+docker compose exec app php artisan tinker
+```
+
+#### 2. **Crie o Usuário no Banco de Dados**
+Cole o seguinte código no terminal do Tinker:
+```php
+\App\Models\User::create([
+    'name' => 'admin',
+    'email' => 'admin@teste.com',
+    'password' => bcrypt('admin')
+]);
+```
+
+#### 3. **Confira se o Usuário foi Criado**
+```php
+\App\Models\User::first();
+```
+
+#### 4. **Saia do Tinker**
+```php
+exit
+```
+
+---
+
+### **Testando o Login**
+Agora você pode testar o endpoint `/api/login` com o usuário criado:
+```bash
+curl -X POST http://seletivo.seplag.mt.gov.br:8000/api/login      -H "Content-Type: application/json"      -d '{"email": "admin@teste.com", "password": "admin"}'
+```
+
+refresh token
+```bash
+curl -X POST http://seletivo.seplag.mt.gov.br:8000/api/refresh \
+     -H "Authorization: Bearer ${REFRESH_TOKEN}" \
+     -H "Content-Type: application/json"
+```
+
+substituir ${REFRESH_TOKEN} pelo refresh_token informado durante o login.
+
+1. Corrija Permissões no Container
+
+Dentro do container, execute:
+
+```bash
+docker-compose exec app chmod -R 775 storage bootstrap/cache
+docker-compose exec app chown -R www-data:www-data storage bootstrap/cache
+```
+
+no arquivo /etc/hosts, adicione:
+
+```bash
+127.1.1.1       http://seletivo.seplag.mt.gov.br
+```
