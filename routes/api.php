@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\PessoaController;
 
 // Rota de login (pública)
 Route::post('/login', [AuthController::class, 'login']);
@@ -12,4 +13,6 @@ Route::post('/refresh', [AuthController::class, 'refresh'])->middleware('jwt.aut
 // Rotas protegidas pelo JWT
 Route::middleware('jwt.auth')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
+
+    Route::apiResource('pessoas', PessoaController::class);
 });
