@@ -10,12 +10,26 @@ use Illuminate\Support\Str;
 
 class PessoaController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $pessoas = Pessoa::with(['fotos', 'enderecos', 'servidorEfetivo', 'servidorTemporario', 'lotacoes'])
-            ->paginate(request('per_page', 10));
+        $pessoas = Pessoa::with([
+                'fotos',
+                'enderecos',
+                'servidorEfetivo',
+                'servidorTemporario',
+                'lotacoes'
+            ])
+            ->orderBy('nome', 'asc')
+            ->paginate($request->per_page ?? 10);
 
-        return response()->json($pessoas);
+        return response()->json([
+            'data' => $pessoas->items(),
+            'meta' => [
+                'current_page' => $pessoas->currentPage(),
+                'per_page' => $pessoas->perPage(),
+                'total' => $pessoas->total(),
+            ]
+        ]);
     }
 
     public function store(Request $request)
