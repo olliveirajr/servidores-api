@@ -12,7 +12,7 @@ return new class extends Migration
      public function up()
     {
         Schema::table('fotos_pessoas', function (Blueprint $table) {
-            $table->string('hash', 64)->change(); // Aumente para 64 caracteres
+            $table->string('hash', 64)->change();
         });
     }
 
@@ -22,7 +22,7 @@ return new class extends Migration
     public function down()
     {
         Schema::table('fotos_pessoas', function (Blueprint $table) {
-            $table->string('hash', 50)->change(); // Reverte para 50
+            $table->string('hash', 50)->change();
         });
     }
 };
