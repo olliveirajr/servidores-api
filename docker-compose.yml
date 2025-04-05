@@ -12,7 +12,7 @@ services:
       - DB_DATABASE=servidores_db
       - DB_USERNAME=laravel
       - DB_PASSWORD=secret
-      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ENDPOINT=http://minio.seletivo-seplag.mt.gov.br:9000
       - MINIO_KEY=minioadmin
       - MINIO_SECRET=minioadmin
       - MINIO_BUCKET=servidores

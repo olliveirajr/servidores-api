@@ -16,7 +16,7 @@ class Pessoa extends Model
     // Relacionamentos
     public function fotos()
     {
-        return $this->hasOne(FotosPessoa::class);
+        return $this->hasMany(FotosPessoa::class);
     }
 
     public function servidorTemporario()
@@ -26,7 +26,7 @@ class Pessoa extends Model
 
     public function servidorEfetivo()
     {
-        return $this->hasOne(ServidorEfetivo::class);
+        return $this->hasOne(ServidorEfetivo::class, 'pessoa_id', 'id');
     }
 
     public function lotacoes()

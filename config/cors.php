@@ -4,7 +4,7 @@ return [
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
     'allowed_methods' => ['*'],
     'allowed_origins' => [
-        'http://seletivo.seplag.mt.gov.br',
+        'http://servidores-api.seletivo-seplag.mt.gov.br',
     ],
     'allowed_origins_patterns' => [],
     'allowed_headers' => ['*'],
