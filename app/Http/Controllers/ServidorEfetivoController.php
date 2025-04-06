@@ -29,9 +29,16 @@ class ServidorEfetivoController extends Controller
             $servidor->pessoa->fotos->transform(function ($foto) {
                 if ($foto->hash) {
                     // Gera o link temporário para a imagem
-                    $foto->url = Storage::disk('minio')->temporaryUrl(
+                    $signedUrl = Storage::disk('minio')->temporaryUrl(
                         $foto->hash,
-                        now()->addMinutes(5) // Expira em 5 minutos
+                        now()->addMinutes(5)
+                    );
+
+                    // Substitui o host interno pelo domínio público
+                    $foto->url = str_replace(
+                        parse_url(config('filesystems.disks.minio.endpoint'), PHP_URL_HOST),
+                        parse_url(config('filesystems.disks.minio.url'), PHP_URL_HOST),
+                        $signedUrl
                     );
                 }
                 return $foto;
@@ -47,6 +54,8 @@ class ServidorEfetivoController extends Controller
         DB::beginTransaction();
 
         try {
+            \Log::info('Iniciando cadastro de servidor efetivo', ['request_data' => $request->all()]);
+
             $validated = $request->validate([
                 'nome' => 'required|string|max:200',
                 'data_nascimento' => 'required|date',
@@ -60,18 +69,20 @@ class ServidorEfetivoController extends Controller
                 'cidade' => 'required|string|max:200',
                 'uf' => 'required|string|max:2',
                 'matricula' => 'required|string|max:20|unique:servidores_efetivos,matricula',
-                'foto' => 'sometimes|required|file|mimes:jpg,png|max:2048',
+                'foto' => 'required|file|mimes:jpg,png|max:2048',
                 'data_foto' => 'sometimes|required|date',
             ]);
 
-            if (ServidorEfetivo::where('matricula', $validated['matricula'])->exists()) {
-                return response()->json(['error' => 'Matrícula já cadastrada.'], 400);
-            }
+            \Log::debug('Dados validados', $validated);
 
+            // Cria ou busca a cidade
             $cidade = Cidade::firstOrCreate(
-                ['nome' => $validated['cidade'], 'uf' => $validated['uf']]
+                ['nome' => $validated['cidade']],
+                ['uf' => $validated['uf']]
             );
+            \Log::debug('Cidade processada', ['cidade_id' => $cidade->id]);
 
+            // Cria o endereço
             $endereco = Endereco::create([
                 'tipo_logradouro' => $validated['tipo_logradouro'],
                 'logradouro' => $validated['logradouro'],
@@ -79,7 +90,9 @@ class ServidorEfetivoController extends Controller
                 'bairro' => $validated['bairro'],
                 'cidade_id' => $cidade->id,
             ]);
+            \Log::debug('Endereço criado', ['endereco_id' => $endereco->id]);
 
+            // Cria a pessoa
             $pessoa = Pessoa::create([
                 'nome' => $validated['nome'],
                 'data_nascimento' => $validated['data_nascimento'],
@@ -87,62 +100,90 @@ class ServidorEfetivoController extends Controller
                 'mae' => $validated['mae'],
                 'pai' => $validated['pai'] ?? null,
             ]);
+            \Log::debug('Pessoa criada', ['pessoa_id' => $pessoa->id]);
 
-            // 🚨 Garantir que o upload seja feito com sucesso antes de continuar
+            // Processa a foto
             if ($request->hasFile('foto')) {
                 $file = $request->file('foto');
+                \Log::info('Arquivo de foto recebido', [
+                    'client_name' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'size' => $file->getSize(),
+                ]);
 
                 try {
                     $hash = hash_file('sha256', $file->path());
-                    $bucket = config('filesystems.disks.minio.bucket');
+                    \Log::debug('Hash do arquivo calculado', ['hash' => $hash]);
 
-                    Storage::disk('minio')->put($hash, file_get_contents($file));
+                    $bucket = config('filesystems.disks.minio.bucket');
+                    $minioConfig = config('filesystems.disks.minio');
+                    \Log::debug('Configuração do MinIO', $minioConfig);
+
+                    \Log::info('Iniciando upload para o MinIO');
+                    Storage::disk('minio')->put($hash, file_get_contents($file->path()));
+                    \Log::info('Upload para o MinIO concluído');
 
                     $pessoa->fotos()->create([
                         'data' => $validated['data_foto'],
                         'bucket' => $bucket,
-                        'hash' => $hash
+                        'hash' => $hash,
                     ]);
+                    \Log::info('Foto salva no banco de dados');
                 } catch (\Exception $e) {
-                    DB::rollBack(); // Reverte tudo se o upload falhar
-                    return response()->json([
-                        'error' => 'Erro ao fazer upload da imagem.',
-                        'details' => $e->getMessage(),
-                    ], 500);
+                    \Log::error('Falha ao enviar foto para o MinIO', [
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    throw $e; // Re-lança a exceção para tratamento externo
                 }
+            } else {
+                \Log::warning('Nenhum arquivo de foto foi enviado na requisição');
             }
 
+            // Associa pessoa ao endereço
             PessoaEndereco::create([
                 'pessoa_id' => $pessoa->id,
                 'endereco_id' => $endereco->id,
             ]);
+            \Log::debug('PessoaEndereço criado');
 
+            // Cria o servidor efetivo
             ServidorEfetivo::create([
                 'pessoa_id' => $pessoa->id,
                 'matricula' => $validated['matricula'],
             ]);
+            \Log::debug('ServidorEfetivo criado');
 
             DB::commit();
+            \Log::info('Servidor efetivo criado com sucesso', ['pessoa_id' => $pessoa->id]);
 
             return response()->json([
                 'message' => 'Servidor efetivo criado com sucesso.',
                 'servidor_efetivo' => $pessoa->load(['fotos', 'enderecos.cidade']),
             ], 201);
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            DB::rollBack();
+            \Log::error('Erro de validação ao criar servidor efetivo', [
+                'errors' => $ve->errors(),
+                'request_data' => $request->all(),
+            ]);
+            return response()->json([
+                'error' => 'Erro de validação.',
+                'details' => $ve->errors(),
+            ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
-
             \Log::error('Erro ao criar servidor efetivo', [
-                'error_message' => $e->getMessage(),
+                'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all(),
             ]);
-
             return response()->json([
                 'error' => 'Ocorreu um erro ao criar o servidor efetivo.',
                 'details' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     public function update(Request $request, $id): \Illuminate\Http\JsonResponse
     {
